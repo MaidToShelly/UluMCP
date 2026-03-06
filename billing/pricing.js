@@ -2,6 +2,7 @@ import { parseWad, formatWad } from "./config.js";
 
 const DEFAULT_PRICES = {
   arc200_list_tokens: "0.001",
+  arc200_holders: "0.002",
   arc200_balance_of: "0.001",
   arc200_allowance: "0.001",
   arc200_transfers: "0.002",
@@ -32,6 +33,12 @@ const DEFAULT_PRICES = {
   mp_listings: "0.002",
   mp_sales: "0.002",
   mp_deletes: "0.002",
+  arc200_transfer_txn: "0.005",
+  arc200_approve_txn: "0.005",
+  arc200_transferFrom_txn: "0.005",
+  arc72_transferFrom_txn: "0.005",
+  humble_swap_txn: "0.01",
+  payment_txn: "0.002",
   x402_check: "0",
   x402_pay_to: "0",
 };

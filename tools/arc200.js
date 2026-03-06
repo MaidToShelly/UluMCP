@@ -93,6 +93,51 @@ export function registerArc200Tools(server) {
   );
 
   server.tool(
+    "arc200_holders",
+    "Lists holders of an ARC200 token sorted by balance (largest first). Voi mainnet only (requires Mimir API).",
+    {
+      network: networkSchema,
+      contractId: contractIdSchema,
+      limit: z
+        .number()
+        .optional()
+        .describe("Maximum number of holders to return (default 20)"),
+      next: z
+        .string()
+        .optional()
+        .describe("Pagination cursor from a previous response"),
+    },
+    async ({ network, contractId, limit, next }) => {
+      try {
+        const mimirUrl = getMimirUrl(network);
+        if (!mimirUrl) {
+          return failure(
+            `Holder listing not available for ${network} (no Mimir API configured)`
+          );
+        }
+        const data = await fetchBalances(mimirUrl, {
+          contractId,
+          limit: limit || 20,
+          next,
+        });
+        const holders = (data.balances || []).map((b) => ({
+          address: b.accountId,
+          balance: b.balance,
+        }));
+        return success({
+          contractId,
+          holders,
+          totalHolders: data["total-count"],
+          nextCursor: data["next-token"] ?? null,
+          source: "mimir",
+        });
+      } catch (err) {
+        return failure(err.message);
+      }
+    }
+  );
+
+  server.tool(
     "arc200_balance_of",
     "Returns ARC200 token balance for an address. Uses Mimir API on voi-mainnet, falls back to on-chain query on other networks.",
     {

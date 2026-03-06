@@ -72,6 +72,7 @@ UluMCP/
     arc72.js               # ARC-72 NFT tools
     swap200.js             # HumbleSwap on-chain pool tools (ulujs)
     humble.js              # HumbleSwap API tools (REST)
+    txns.js                # Unsigned transaction builders
     snowball.js            # SnowballSwap aggregator tools
     envoi.js               # enVoi naming service tools
     marketplace.js         # NFT marketplace tools
@@ -109,6 +110,7 @@ All tools are available in every deployment mode. The billing layer is transpare
 | Tool | Description | WAD Cost |
 |---|---|---|
 | `arc200_list_tokens` | List ARC-200 tokens on the network (Mimir) | 0.001 |
+| `arc200_holders` | List holders of an ARC-200 token sorted by balance (Mimir) | 0.002 |
 | `arc200_balance_of` | Token balance for an address | 0.001 |
 | `arc200_allowance` | Spending allowance (owner → spender) | 0.001 |
 | `arc200_transfers` | Token transfer history | 0.002 |
@@ -171,6 +173,19 @@ Powered by the [HumbleSwap REST API](https://humble-api.voi.nautilus.sh/api-docs
 | `mp_listings` | Active NFT marketplace listings | 0.002 |
 | `mp_sales` | NFT sales history | 0.002 |
 | `mp_deletes` | Cancelled/deleted listings | 0.002 |
+
+### Unsigned Transaction Tools
+
+Build unsigned transactions for wallet signing. Each returns `{ txns: string[] }` -- base64-encoded transaction group as returned by ulujs. The caller signs with their wallet (Kibisis, Lute, etc.) and submits to the network.
+
+| Tool | Description | WAD Cost |
+|---|---|---|
+| `arc200_transfer_txn` | Build unsigned ARC-200 token transfer | 0.005 |
+| `arc200_approve_txn` | Build unsigned ARC-200 spending approval | 0.005 |
+| `arc200_transferFrom_txn` | Build unsigned ARC-200 delegated transfer (spend from allowance) | 0.005 |
+| `arc72_transferFrom_txn` | Build unsigned ARC-72 NFT transfer | 0.005 |
+| `humble_swap_txn` | Build unsigned HumbleSwap pool swap | 0.01 |
+| `payment_txn` | Build unsigned native VOI/ALGO payment | 0.002 |
 
 ### x402 Payment Tools
 

@@ -10,6 +10,7 @@ import { registerMarketplaceTools } from "./tools/marketplace.js";
 import { registerSnowballTools } from "./tools/snowball.js";
 import { registerEnvoiTools } from "./tools/envoi.js";
 import { registerHumbleApiTools } from "./tools/humble.js";
+import { registerTxnTools } from "./tools/txns.js";
 import { registerX402Tools } from "./tools/x402.js";
 import {
   buildPaymentRequirements,
@@ -29,6 +30,7 @@ function createMcpServer() {
   registerSnowballTools(server);
   registerEnvoiTools(server);
   registerHumbleApiTools(server);
+  registerTxnTools(server);
   registerX402Tools(server);
   return server;
 }
