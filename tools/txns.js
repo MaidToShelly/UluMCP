@@ -327,6 +327,116 @@ export function registerTxnTools(server) {
   );
 
   server.tool(
+    "aramid_bridge_txn",
+    "Builds unsigned Aramid Bridge transactions for bridging assets between Voi and Algorand. Supports native tokens (VOI/ALGO) and ASAs. Returns base64-encoded transaction (string[]) for wallet signing. The 0.1% bridge fee is calculated automatically. Delivery is automatic on AVM destinations.",
+    {
+      sourceNetwork: z
+        .enum(["voi-mainnet", "algorand-mainnet"])
+        .describe("Network to bridge FROM"),
+      sender: z.string().describe("Sender wallet address on source network"),
+      destinationAddress: z
+        .string()
+        .describe("Recipient wallet address on destination network"),
+      sourceToken: z
+        .number()
+        .describe("ASA ID of token on source network (0 for native VOI/ALGO)"),
+      destinationToken: z
+        .string()
+        .describe(
+          "Asset ID of token on destination network (as string, e.g. '2320775407' for aVoi on Algorand)"
+        ),
+      amount: z
+        .string()
+        .describe(
+          "Total amount to bridge in base units (fee is deducted from this). E.g. '1000000' for 1 token with 6 decimals"
+        ),
+    },
+    async ({
+      sourceNetwork,
+      sender,
+      destinationAddress,
+      sourceToken,
+      destinationToken,
+      amount,
+    }) => {
+      try {
+        const BRIDGE_ADDRESS =
+          "ARAMIDFJYV2TOFB5MRNZJIXBSAVZCVAUDAPFGKR5PNX4MTILGAZABBTXQQ";
+        const DEST_CHAIN_IDS = {
+          "voi-mainnet": 416101,
+          "algorand-mainnet": 416001,
+        };
+        const destNetwork =
+          sourceNetwork === "voi-mainnet"
+            ? "algorand-mainnet"
+            : "voi-mainnet";
+
+        const totalBase = BigInt(amount);
+        if (totalBase <= 0n) return failure("Amount must be positive");
+
+        const feeAmount = totalBase / 1000n;
+        const destinationAmount = totalBase - feeAmount;
+
+        const noteObj = {
+          destinationNetwork: DEST_CHAIN_IDS[destNetwork],
+          destinationAddress,
+          destinationToken: String(destinationToken),
+          feeAmount: Number(feeAmount),
+          destinationAmount: Number(destinationAmount),
+          note: "aramid",
+          sourceAmount: Number(destinationAmount),
+        };
+        const noteBytes = new Uint8Array(
+          Buffer.from(JSON.stringify(noteObj))
+        );
+
+        const algod = getAlgodClient(sourceNetwork);
+        const params = await algod.getTransactionParams().do();
+
+        let txn;
+        if (sourceToken === 0) {
+          txn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
+            sender,
+            receiver: BRIDGE_ADDRESS,
+            amount: totalBase,
+            suggestedParams: params,
+            note: noteBytes,
+          });
+        } else {
+          txn = algosdk.makeAssetTransferTxnWithSuggestedParamsFromObject({
+            sender,
+            receiver: BRIDGE_ADDRESS,
+            amount: totalBase,
+            assetIndex: sourceToken,
+            suggestedParams: params,
+            note: noteBytes,
+          });
+        }
+
+        const encoded = algosdk.encodeUnsignedTransaction(txn);
+        const b64 = Buffer.from(encoded).toString("base64");
+
+        return success({
+          action: "aramid_bridge",
+          sourceNetwork,
+          destinationNetwork: destNetwork,
+          sender,
+          destinationAddress,
+          sourceToken,
+          destinationToken,
+          totalAmount: amount,
+          feeAmount: String(feeAmount),
+          destinationAmount: String(destinationAmount),
+          bridgeAddress: BRIDGE_ADDRESS,
+          txns: [b64],
+        });
+      } catch (err) {
+        return failure(err.message);
+      }
+    }
+  );
+
+  server.tool(
     "payment_txn",
     "Builds an unsigned native payment transaction (VOI or ALGO depending on network). Returns a base64-encoded transaction (string[]) for wallet signing.",
     {
