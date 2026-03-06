@@ -1,12 +1,23 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { registerArc200Tools } from "./tools/arc200.js";
+import { registerArc72Tools } from "./tools/arc72.js";
+import { registerSwapTools } from "./tools/swap200.js";
+import { registerMarketplaceTools } from "./tools/marketplace.js";
+import { registerSnowballTools } from "./tools/snowball.js";
+import { registerEnvoiTools } from "./tools/envoi.js";
 
-// Create server
 const server = new McpServer({
-  name: "empty-mcp",
-  version: "0.0.1"
+  name: "ulu-mcp",
+  version: "0.0.1",
 });
 
-// Start server
+registerArc200Tools(server);
+registerArc72Tools(server);
+registerSwapTools(server);
+registerMarketplaceTools(server);
+registerSnowballTools(server);
+registerEnvoiTools(server);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
