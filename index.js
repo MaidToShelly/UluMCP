@@ -6,6 +6,8 @@ import { registerSwapTools } from "./tools/swap200.js";
 import { registerMarketplaceTools } from "./tools/marketplace.js";
 import { registerSnowballTools } from "./tools/snowball.js";
 import { registerEnvoiTools } from "./tools/envoi.js";
+import { registerHumbleApiTools } from "./tools/humble.js";
+import { registerX402Tools } from "./tools/x402.js";
 
 const server = new McpServer({
   name: "ulu-mcp",
@@ -18,6 +20,8 @@ registerSwapTools(server);
 registerMarketplaceTools(server);
 registerSnowballTools(server);
 registerEnvoiTools(server);
+registerHumbleApiTools(server);
+registerX402Tools(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

@@ -12,9 +12,63 @@ npm install
 
 ## Usage
 
+### Stdio (local MCP client)
+
 ```bash
 node index.js
 ```
+
+### HTTP (remote hosting with x402 payment gating)
+
+```bash
+X402_AVM_PAY_TO=IR7EOSEN5S3L2HWHW6OXQW6CBG2I2N73VEGI3NXZLYPKZXAP3EUXG4EINU \
+X402_AVM_PRICE=1000000 \
+node serve.js
+```
+
+The HTTP server exposes the MCP protocol over Streamable HTTP at `/mcp` (default port 3000). When `X402_AVM_PAY_TO` and `X402_AVM_PRICE` are set, tool calls require an x402 payment header. Initialization and session management requests pass through without payment.
+
+Set `MCP_PORT` to change the listening port.
+
+### HTTP with WAD metered billing
+
+```bash
+cp .env.example .env
+# Edit .env with your treasury address and mnemonic
+node serve-billed.js
+```
+
+The billed server adds metered usage billing using WAD (Whale Asset Dollar, ARC-200 token `47138068`). Agents authenticate by wallet, usage is tracked internally, and charges are settled on-chain when accrued usage reaches the settlement threshold.
+
+**Billing model:**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `MIN_REQUIRED_BALANCE` | 10 WAD | Minimum WAD balance to activate |
+| `MIN_REQUIRED_ALLOWANCE` | 10 WAD | Minimum WAD allowance to treasury |
+| `SETTLEMENT_THRESHOLD` | 1 WAD | Trigger on-chain settlement |
+| `MAX_UNPAID_USAGE` | 2 WAD | Suspend agent if unpaid |
+
+**Agent onboarding flow:**
+
+1. `POST /auth/challenge` with `{ "address": "<wallet>" }` → receive `{ nonce, message }`
+2. Sign the message bytes with the wallet's private key
+3. `POST /auth/verify` with `{ "address", "nonce", "signature" }` → receive `{ token }`
+4. Connect to MCP at `POST /mcp` with `Authorization: Bearer <token>`
+
+The server checks WAD balance and allowance during verification. The agent must have approved the treasury address for at least 10 WAD via ARC-200 `approve`.
+
+**Endpoints:**
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /auth/challenge` | Get auth challenge nonce |
+| `POST /auth/verify` | Verify wallet signature, activate agent |
+| `GET /agent/:address/status` | Agent billing status |
+| `GET /pricing` | Tool pricing in WAD |
+| `POST /mcp` | MCP protocol (Streamable HTTP) |
+
+**Settlement:** When accrued usage reaches 1 WAD, the server calls `arc200_transferFrom` to collect from the agent's wallet to the treasury. A background worker retries failed settlements and can unsuspend agents once balance/allowance are restored.
 
 ## Adding to a Client
 
@@ -84,12 +138,17 @@ Add to your MCP client config (e.g. `claude_desktop_config.json`):
 | `mp_sales` | Fetches NFT marketplace sales history (Mimir) |
 | `mp_deletes` | Fetches cancelled/deleted marketplace listings (Mimir) |
 
+### x402 Payment Tools
+
+| Tool | Description |
+|------|-------------|
+| `x402_pay_to` | Returns configured payment receiver addresses by network |
+| `x402_check` | Probes a URL to discover its x402 payment requirements without paying |
+
 ## Supported Networks
 
 - `algorand-mainnet`
-- `algorand-testnet`
 - `voi-mainnet`
-- `voi-testnet`
 
 Override endpoints with environment variables:
 
@@ -100,7 +159,7 @@ ALGORAND_MAINNET_INDEXER_URL=https://your-indexer.example.com
 ALGORAND_MAINNET_INDEXER_TOKEN=your-token
 ```
 
-The same pattern applies for other networks (`ALGORAND_TESTNET_*`, `VOI_MAINNET_*`, `VOI_TESTNET_*`).
+The same pattern applies for other networks (`VOI_MAINNET_*`).
 
 ### Mimir API
 
@@ -126,12 +185,30 @@ The [enVoi](https://api.envoi.sh/) naming service resolves VOI names and address
 ENVOI_API_URL=https://api.envoi.sh
 ```
 
+### x402 Payments
+
+The [x402](https://x402.org) protocol enables pay-per-request APIs. The `x402_check` tool probes endpoints to discover payment requirements. When hosting over HTTP (`serve.js`), tool calls are gated behind x402 payment.
+
+```bash
+X402_AVM_PAY_TO=IR7EOSEN5S3L2HWHW6OXQW6CBG2I2N73VEGI3NXZLYPKZXAP3EUXG4EINU
+X402_AVM_PRICE=1000000        # Price per request in base units (e.g. 1 VOI)
+X402_AVM_ASSET=0              # Asset ID (default: 0 for native VOI)
+X402_AVM_NETWORK=avm:voi-mainnet  # Network identifier (default)
+X402_EVM_PAY_TO=0xYourEvmAddress  # EVM receiver (future)
+X402_EVM_PRICE=10000              # EVM price in base units (future)
+```
+
+Payment is enforced when both `PAY_TO` and `PRICE` are set for a network. Requests without a valid `PAYMENT-SIGNATURE` header receive a `402 Payment Required` response with accepted payment options.
+
 ## Project Structure
 
 ```
 UluMCP/
-  index.js              # MCP server entry point
+  index.js              # MCP server entry point (stdio)
+  serve.js              # HTTP server entry point (x402 gated)
+  serve-billed.js       # HTTP server with WAD metered billing
   package.json
+  .env.example          # Environment configuration template
   config/
     networks.js          # Network configuration with env overrides
   lib/
@@ -139,6 +216,20 @@ UluMCP/
     mimir.js             # Mimir API client
     snowball.js          # SnowballSwap API client
     envoi.js             # enVoi naming service client
+    x402.js              # x402 payment client
+  billing/
+    config.js            # Billing constants and WAD math
+    db.js                # SQLite schema and queries
+    pricing.js           # Tool cost registry
+    meter.js             # Usage tracking and thresholds
+    settlement.js        # On-chain WAD settlement
+    worker.js            # Background settlement worker
+  auth/
+    auth.js              # Wallet auth (challenge/verify/tokens)
+  chain/
+    wad.js               # WAD ARC-200 token operations
+  test/
+    billing.test.js      # Billing logic tests
   tools/
     arc200.js            # ARC200 token tools
     arc72.js             # ARC72 NFT tools
@@ -146,4 +237,5 @@ UluMCP/
     snowball.js          # SnowballSwap aggregator tools
     envoi.js             # enVoi naming service tools
     marketplace.js       # NFT marketplace tools
+    x402.js              # x402 payment tools
 ```
