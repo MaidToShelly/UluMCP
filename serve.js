@@ -12,6 +12,7 @@ import { registerEnvoiTools } from "./tools/envoi.js";
 import { registerHumbleApiTools } from "./tools/humble.js";
 import { registerTxnTools } from "./tools/txns.js";
 import { registerX402Tools } from "./tools/x402.js";
+import { registerAlgodTools } from "./tools/algod.js";
 import {
   buildPaymentRequirements,
   hasPaymentHeader,
@@ -32,6 +33,7 @@ function createMcpServer() {
   registerHumbleApiTools(server);
   registerTxnTools(server);
   registerX402Tools(server);
+  registerAlgodTools(server);
   return server;
 }
 

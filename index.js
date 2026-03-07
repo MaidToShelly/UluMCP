@@ -9,6 +9,7 @@ import { registerEnvoiTools } from "./tools/envoi.js";
 import { registerHumbleApiTools } from "./tools/humble.js";
 import { registerTxnTools } from "./tools/txns.js";
 import { registerX402Tools } from "./tools/x402.js";
+import { registerAlgodTools } from "./tools/algod.js";
 
 const server = new McpServer({
   name: "ulu-mcp",
@@ -24,6 +25,7 @@ registerEnvoiTools(server);
 registerHumbleApiTools(server);
 registerTxnTools(server);
 registerX402Tools(server);
+registerAlgodTools(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
