@@ -699,7 +699,7 @@ export function registerTxnTools(server) {
           sourceAmount: Number(destinationAmount),
         };
         const noteBytes = new Uint8Array(
-          Buffer.from(JSON.stringify(noteObj))
+          Buffer.from("aramid-transfer/v1:j" + JSON.stringify(noteObj))
         );
 
         const algod = getAlgodClient(sourceNetwork);
