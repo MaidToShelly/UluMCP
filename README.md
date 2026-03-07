@@ -95,6 +95,7 @@ Add to your MCP client config (e.g. `claude_desktop_config.json`):
 | `arc200_balance_of` | Returns ARC200 token balance for an address |
 | `arc200_allowance` | Returns spending allowance granted by owner to spender |
 | `arc200_transfers` | Fetches token transfer history with optional user filter |
+| `arc200_holders` | Lists holders of an ARC200 token sorted by balance (Mimir) |
 | `arc200_approvals` | Fetches token approval history |
 
 ### ARC72 NFT Tools
@@ -111,6 +112,21 @@ Add to your MCP client config (e.g. `claude_desktop_config.json`):
 |------|-------------|
 | `humble_pool_state` | Returns pool state including token IDs, reserves, and price |
 | `humble_quote` | Estimates swap output using constant-product formula with fees |
+
+### HumbleSwap API Tools
+
+| Tool | Description |
+|------|-------------|
+| `humble_protocol_stats` | Protocol-wide statistics (TVL, 24h volume, fees) |
+| `humble_pools` | Lists all liquidity pools with token pairs and pool IDs |
+| `humble_pool_details` | Detailed pool info (reserves, fees, protocol balances, LP token data) |
+| `humble_pool_analytics` | Pool analytics including TVL and liquidity depth |
+| `humble_tokens` | Lists all tracked tokens with name, symbol, decimals, and supply |
+| `humble_token_metadata` | Enriched token metadata including market cap |
+| `humble_token_price` | Current price data across all pools a token trades in |
+| `humble_price_history` | Historical price data for charting trends |
+| `humble_router` | Finds all swap paths between two tokens (direct and multi-hop) |
+| `humble_arbitrage` | Detects arbitrage opportunities across pools |
 
 ### SnowballSwap Aggregator Tools
 
@@ -137,6 +153,25 @@ Add to your MCP client config (e.g. `claude_desktop_config.json`):
 | `mp_listings` | Fetches active NFT marketplace listings (Mimir) |
 | `mp_sales` | Fetches NFT marketplace sales history (Mimir) |
 | `mp_deletes` | Fetches cancelled/deleted marketplace listings (Mimir) |
+
+### Transaction Builder Tools
+
+| Tool | Description |
+|------|-------------|
+| `arc200_transfer_txn` | Builds unsigned ARC-200 token transfer transactions |
+| `arc200_approve_txn` | Builds unsigned ARC-200 approval transactions |
+| `arc200_transferFrom_txn` | Builds unsigned ARC-200 delegated transfer transactions |
+| `arc72_transferFrom_txn` | Builds unsigned ARC-72 NFT transfer transactions |
+| `humble_swap_txn` | Builds unsigned HumbleSwap swap transactions (handles VOI wrapping) |
+| `envoi_purchase_txn` | Builds unsigned enVoi name registration transactions |
+| `aramid_bridge_txn` | Builds unsigned Aramid Bridge transactions (Voi ↔ Algorand) |
+| `payment_txn` | Builds unsigned native payment transactions (VOI or ALGO) |
+
+### Algod Tools
+
+| Tool | Description |
+|------|-------------|
+| `algod_send_raw_transactions` | Submits signed transactions to the network (compatible with algorand-mcp) |
 
 ### x402 Payment Tools
 
@@ -237,5 +272,8 @@ UluMCP/
     snowball.js          # SnowballSwap aggregator tools
     envoi.js             # enVoi naming service tools
     marketplace.js       # NFT marketplace tools
+    humble.js            # HumbleSwap API tools
+    txns.js              # Transaction builder tools
+    algod.js             # Algod tools (send raw transactions)
     x402.js              # x402 payment tools
 ```
