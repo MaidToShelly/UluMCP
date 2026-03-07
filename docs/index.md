@@ -185,6 +185,7 @@ Build unsigned transactions for wallet signing. Each returns `{ txns: string[] }
 | `arc200_transferFrom_txn` | Build unsigned ARC-200 delegated transfer (spend from allowance) | 0.005 |
 | `arc72_transferFrom_txn` | Build unsigned ARC-72 NFT transfer | 0.005 |
 | `humble_swap_txn` | Build unsigned HumbleSwap pool swap | 0.01 |
+| `envoi_purchase_txn` | Build unsigned enVoi name registration for any parent (.voi, .wallet.voi, etc.) | 0.01 |
 | `aramid_bridge_txn` | Build unsigned Aramid Bridge transaction (Voi ↔ Algorand) | 0.005 |
 | `payment_txn` | Build unsigned native VOI/ALGO payment | 0.002 |
 

@@ -38,6 +38,7 @@ const DEFAULT_PRICES = {
   arc200_transferFrom_txn: "0.005",
   arc72_transferFrom_txn: "0.005",
   humble_swap_txn: "0.01",
+  envoi_purchase_txn: "0.01",
   aramid_bridge_txn: "0.005",
   payment_txn: "0.002",
   x402_check: "0",

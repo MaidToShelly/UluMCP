@@ -186,18 +186,46 @@ export function registerTxnTools(server) {
           );
         }
 
+        async function fetchTokenMeta(contractId) {
+          const acc = { addr: sender, sk: new Uint8Array(0) };
+          const ci = new arc200(contractId, algod, indexer, { acc });
+          const ntCi = new CONTRACT(
+            contractId, algod, indexer, abi.nt200, acc
+          );
+          const [decR, symR, nameR, withdrawR] = await Promise.all([
+            ci.arc200_decimals(),
+            ci.arc200_symbol(),
+            ci.arc200_name(),
+            ntCi.withdraw(1),
+          ]);
+          const isNt200 =
+            withdrawR.success ||
+            !withdrawR.error?.includes("match label");
+          return {
+            decimals: decR.success ? Number(decR.returnValue) : 6,
+            symbol: symR.success ? symR.returnValue : String(contractId),
+            name: nameR.success ? nameR.returnValue : "",
+            isNt200,
+          };
+        }
+
+        const [metaIn, metaOut] = await Promise.all([
+          fetchTokenMeta(resolvedIn),
+          fetchTokenMeta(resolvedOut),
+        ]);
+
         const A = {
-          tokenId: String(tokenIn),
+          tokenId: metaIn.isNt200 ? String(tokenIn) : undefined,
           contractId: resolvedIn,
-          symbol: "tokenIn",
-          decimals: 6,
+          symbol: metaIn.symbol,
+          decimals: metaIn.decimals,
           amount: amountIn,
         };
         const B = {
-          tokenId: String(tokenOut),
+          tokenId: metaOut.isNt200 ? String(tokenOut) : undefined,
           contractId: resolvedOut,
-          symbol: "tokenOut",
-          decimals: 6,
+          symbol: metaOut.symbol,
+          decimals: metaOut.decimals,
         };
 
         const result = await swapUtil(ci, sender, poolId, A, B, [], {
@@ -319,6 +347,290 @@ export function registerTxnTools(server) {
           to,
           tokenId,
           txns: result.txns,
+        });
+      } catch (err) {
+        return failure(err.message);
+      }
+    }
+  );
+
+  server.tool(
+    "envoi_purchase_txn",
+    "Builds unsigned transactions to register/purchase an enVoi name (e.g. 'myname.voi', 'myname.wallet.voi'). Dynamically discovers the registrar, payment token, and price. For nt200 payment tokens (like enVoi/wVOI), auto-deposits native VOI. For other ARC-200 payment tokens, user must already hold them. Returns base64-encoded transaction group (string[]) for wallet signing. Voi mainnet only.",
+    {
+      name: z
+        .string()
+        .describe(
+          "Name label to register (without parent suffix, e.g. 'myname')"
+        ),
+      sender: z.string().describe("Buyer wallet address"),
+      parent: z
+        .string()
+        .optional()
+        .describe(
+          "Parent domain (default 'voi'). Use 'wallet.voi' for wallet.voi names, 'founder.voi' for founder.voi names, etc."
+        ),
+      years: z
+        .number()
+        .optional()
+        .describe("Registration duration in years (default 1)"),
+    },
+    async ({ name: nameLabel, sender, parent, years }) => {
+      try {
+        const { createHash } = await import("crypto");
+        const network = "voi-mainnet";
+        const algod = getAlgodClient(network);
+        const indexer = getIndexerClient(network);
+        const acc = { addr: sender, sk: new Uint8Array(0) };
+        const duration = BigInt((years || 1) * 365 * 24 * 60 * 60);
+        const parentName = parent || "voi";
+
+        const REGISTRY_ID = 797607;
+        const RESOLVER_ID = 797608;
+
+        function namehash(name) {
+          if (!name) return Buffer.alloc(32);
+          const labels = name.split(".");
+          let node = Buffer.alloc(32);
+          for (let i = labels.length - 1; i >= 0; i--) {
+            const labelHash = createHash("sha256")
+              .update(Buffer.from(labels[i]))
+              .digest();
+            node = createHash("sha256")
+              .update(Buffer.concat([node, labelHash]))
+              .digest();
+          }
+          return node;
+        }
+
+        const registrarAbi = {
+          name: "VNSRegistrar",
+          methods: [
+            {
+              name: "get_price",
+              args: [{ type: "byte[32]" }, { type: "uint256" }],
+              returns: { type: "uint64" },
+            },
+            {
+              name: "get_payment_token",
+              args: [],
+              returns: { type: "uint64" },
+            },
+            {
+              name: "register",
+              args: [
+                { type: "byte[32]" },
+                { type: "address" },
+                { type: "uint256" },
+              ],
+              returns: { type: "byte[32]" },
+            },
+          ],
+          events: [],
+        };
+
+        const resolverAbi = {
+          name: "VNSResolver",
+          methods: [
+            {
+              name: "setName",
+              args: [{ type: "byte[32]" }, { type: "byte[256]" }],
+              returns: { type: "void" },
+            },
+          ],
+          events: [],
+        };
+
+        let registrarId;
+        if (parentName === "voi") {
+          registrarId = 797609;
+        } else {
+          const registryAbi = {
+            name: "VNSRegistry",
+            methods: [
+              {
+                name: "ownerOf",
+                args: [{ type: "byte[32]" }],
+                returns: { type: "address" },
+              },
+            ],
+            events: [],
+          };
+          const ciRegistry = new CONTRACT(
+            REGISTRY_ID, algod, indexer, registryAbi, acc
+          );
+          const ownerR = await ciRegistry.ownerOf(
+            new Uint8Array(namehash(parentName))
+          );
+          if (!ownerR.success) {
+            return failure(`Parent '${parentName}' not found in registry`);
+          }
+          const nodeOwner = ownerR.returnValue;
+          const accInfo = await indexer
+            .lookupAccountByID(nodeOwner)
+            .do();
+          const createdRound = Number(accInfo.account.createdAtRound);
+          if (!createdRound) {
+            return failure(
+              `Could not determine registrar for '${parentName}'`
+            );
+          }
+          const block = await indexer.lookupBlock(createdRound).do();
+          const appTxn = block.transactions.find((t) => {
+            if (t.txType !== "appl") return false;
+            const id = t.applicationTransaction?.applicationId;
+            return (
+              id &&
+              algosdk.getApplicationAddress(BigInt(id)).toString() ===
+                nodeOwner
+            );
+          });
+          if (!appTxn) {
+            return failure(
+              `Could not resolve registrar app for '${parentName}'`
+            );
+          }
+          registrarId = Number(
+            appTxn.applicationTransaction.applicationId
+          );
+        }
+
+        const ciRegistrar = new CONTRACT(
+          registrarId, algod, indexer, registrarAbi, acc
+        );
+
+        const [payTokenR, priceR] = await Promise.all([
+          ciRegistrar.get_payment_token(),
+          (() => {
+            const nameBytes = new Uint8Array(32);
+            for (let i = 0; i < nameLabel.length && i < 32; i++) {
+              nameBytes[i] = nameLabel.charCodeAt(i);
+            }
+            return ciRegistrar.get_price(nameBytes, duration);
+          })(),
+        ]);
+
+        if (!payTokenR.success) {
+          return failure("Failed to query payment token");
+        }
+        if (!priceR.success) {
+          return failure("Failed to query name price");
+        }
+
+        const paymentTokenId = Number(payTokenR.returnValue);
+        const price = BigInt(priceR.returnValue);
+        const registrarAddr = algosdk
+          .getApplicationAddress(BigInt(registrarId))
+          .toString();
+
+        const ciTokenMeta = new arc200(
+          paymentTokenId, algod, indexer, { acc }
+        );
+        const ntCi = new CONTRACT(
+          paymentTokenId, algod, indexer, abi.nt200, acc
+        );
+        const [decR, symR, withdrawR] = await Promise.all([
+          ciTokenMeta.arc200_decimals(),
+          ciTokenMeta.arc200_symbol(),
+          ntCi.withdraw(1),
+        ]);
+        const decimals = decR.success ? Number(decR.returnValue) : 6;
+        const symbol = symR.success
+          ? symR.returnValue.replace(/\0/g, "").trim()
+          : String(paymentTokenId);
+        const isNt200 =
+          withdrawR.success ||
+          !withdrawR.error?.includes("match label");
+
+        const buildMode = [true, false, true];
+        const nameBytes = new Uint8Array(32);
+        for (let i = 0; i < nameLabel.length && i < 32; i++) {
+          nameBytes[i] = nameLabel.charCodeAt(i);
+        }
+
+        const buildN = [];
+
+        if (isNt200) {
+          const balR = await ciTokenMeta.arc200_balanceOf(sender);
+          const currentBal = balR.success ? balR.returnValue : 0n;
+          if (currentBal === 0n || currentBal === BigInt(0)) {
+            const ciCBB = new CONTRACT(
+              paymentTokenId, algod, indexer, abi.nt200, acc,
+              ...buildMode
+            );
+            const cbbObj = (
+              await ciCBB.createBalanceBox(sender)
+            ).obj;
+            buildN.push({ ...cbbObj, payment: 28500 });
+          }
+          const ciDep = new CONTRACT(
+            paymentTokenId, algod, indexer, abi.nt200, acc, ...buildMode
+          );
+          const depObj = (await ciDep.deposit(Number(price))).obj;
+          buildN.push({ ...depObj, payment: Number(price) });
+        }
+
+        const ciApprove = new CONTRACT(
+          paymentTokenId, algod, indexer, abi.arc200, acc, ...buildMode
+        );
+        const appObj = (
+          await ciApprove.arc200_approve(registrarAddr, price)
+        ).obj;
+        buildN.push({ ...appObj, payment: 28501 });
+
+        const ciRegBuild = new CONTRACT(
+          registrarId, algod, indexer, registrarAbi, acc, ...buildMode
+        );
+        const regObj = (
+          await ciRegBuild.register(nameBytes, sender, duration)
+        ).obj;
+        buildN.push({ ...regObj, payment: 336700 });
+
+        const fullName = `${nameLabel}.${parentName}`;
+        const fullNameBytes = new Uint8Array(256);
+        for (let i = 0; i < fullName.length && i < 256; i++) {
+          fullNameBytes[i] = fullName.charCodeAt(i);
+        }
+        const node = namehash(fullName);
+
+        const ciResBuild = new CONTRACT(
+          RESOLVER_ID, algod, indexer, resolverAbi, acc, ...buildMode
+        );
+        const resObj = (
+          await ciResBuild.setName(new Uint8Array(node), fullNameBytes)
+        ).obj;
+        buildN.push({ ...resObj, payment: 336701 });
+
+        const ci = new CONTRACT(
+          registrarId, algod, indexer, abi.custom, acc
+        );
+        ci.setFee(15000);
+        ci.setEnableGroupResourceSharing(true);
+        ci.setExtraTxns(buildN);
+
+        const customR = await ci.custom();
+        if (!customR.success) {
+          return failure(
+            customR.error || "Failed to build registration transactions"
+          );
+        }
+
+        const priceHuman = Number(price) / 10 ** decimals;
+
+        return success({
+          action: "envoi_purchase",
+          name: fullName,
+          sender,
+          parent: parentName,
+          years: years || 1,
+          price: priceHuman,
+          priceBase: String(price),
+          paymentToken: paymentTokenId,
+          paymentSymbol: symbol,
+          paymentDecimals: decimals,
+          depositsVoi: isNt200,
+          registrarId,
+          txns: customR.txns,
         });
       } catch (err) {
         return failure(err.message);
